@@ -1,0 +1,38 @@
+% Function to extract numeric variables only
+function Sample_DF_Numeric = get_numeric_subset(Sample_DF)
+    % Extract only the numeric variables from the dataframe
+    numeric_vars = varfun(@isnumeric, Sample_DF, 'OutputFormat', 'uniform');
+    Sample_DF_Numeric = Sample_DF(:, numeric_vars);
+end
+
+% Function to calculate summary statistics, including missing values
+function summary_stats = get_summary_statistics(Sample_DF_Numeric)
+    % Initialize an empty struct to store summary statistics
+    summary_stats = struct();
+    var_names = Sample_DF_Numeric.Properties.VariableNames;
+
+    for i = 1:length(var_names)
+        col_data = Sample_DF_Numeric.(var_names{i});
+        summary_stats.(var_names{i}) = struct( ...
+            'mean', mean(col_data, 'omitnan'), ...
+            'median', median(col_data, 'omitnan'), ...
+            'std', std(col_data, 'omitnan'), ...
+            'min', min(col_data), ...
+            'max', max(col_data), ...
+            'q25', prctile(col_data, 25), ...
+            'q75', prctile(col_data, 75), ...
+            'missing_count', sum(isnan(col_data)) ...
+        );
+    end
+end
+
+% Sample DataFrame to test the functions
+Sample_DF = table([1; 2; 3; NaN; 5], [10; 15; NaN; 20; 25], [NaN; NaN; NaN; NaN; 5], ...
+                  'VariableNames', {'Var1', 'Var2', 'Var3'});
+
+% Execute the functions
+Sample_DF_Numeric = get_numeric_subset(Sample_DF);
+summary_stats = get_summary_statistics(Sample_DF_Numeric);
+
+% Display the summary statistics
+disp(summary_stats);
