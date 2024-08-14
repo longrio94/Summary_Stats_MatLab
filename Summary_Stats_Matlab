@@ -27,8 +27,10 @@ function summary_stats = get_summary_statistics(Sample_DF_Numeric)
 end
 
 % Sample DataFrame to test the functions
-Sample_DF = table([1; 2; 3; NaN; 5], [10; 15; NaN; 20; 25], [NaN; NaN; NaN; NaN; 5], ...
-                  'VariableNames', {'Var1', 'Var2', 'Var3'});
+Var1 = [1; 2; 3; NaN; 5];
+Var2 = [10; 15; NaN; 20; 25];
+Var3 = [NaN; NaN; NaN; NaN; 5];
+Sample_DF = table(Var1, Var2, Var3, 'VariableNames', {'Var1', 'Var2', 'Var3'});
 
 % Execute the functions
 Sample_DF_Numeric = get_numeric_subset(Sample_DF);
