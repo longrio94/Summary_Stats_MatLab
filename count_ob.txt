@@ -1,32 +1,32 @@
 WITH filtered_data AS (
-    -- Extract year and month for filtering December and January data
+    -- Extract the transition year and month for filtering December and January data
     SELECT 
-        EXTRACT(YEAR FROM peil_dt) AS year,
-        EXTRACT(MONTH FROM peil_dt) AS month,
+        CAST(EXTRACT(YEAR FROM peil_dt) AS INTEGER) AS transition_year,
+        CAST(EXTRACT(MONTH FROM peil_dt) AS INTEGER) AS month,
         obligor_id
     FROM customer_table
     WHERE EXTRACT(MONTH FROM peil_dt) IN (12, 1) -- Filter for Dec and Jan
 ),
 dec_data AS (
     -- Filter for December data
-    SELECT year, obligor_id
+    SELECT transition_year, obligor_id
     FROM filtered_data
     WHERE month = 12
 ),
 jan_data AS (
     -- Filter for January data
-    SELECT year, obligor_id
+    SELECT transition_year, obligor_id
     FROM filtered_data
     WHERE month = 1
 )
 -- Compare December and January obligors
 SELECT 
-    COALESCE(d.year, j.year) AS year,  -- Take the common year
+    COALESCE(d.transition_year, j.transition_year) AS transition_year,  -- Take the common transition year
     COUNT(DISTINCT d.obligor_id) AS dec_only_count,  -- Obligors only in Dec
     COUNT(DISTINCT j.obligor_id) AS jan_only_count,  -- Obligors only in Jan
     COUNT(DISTINCT CASE WHEN d.obligor_id = j.obligor_id THEN d.obligor_id ELSE NULL END) AS same_obligor_count -- Obligors in both
 FROM dec_data d
 FULL OUTER JOIN jan_data j 
-    ON d.obligor_id = j.obligor_id AND d.year = j.year
-GROUP BY COALESCE(d.year, j.year)
-ORDER BY year;
+    ON d.obligor_id = j.obligor_id AND d.transition_year = j.transition_year
+GROUP BY COALESCE(d.transition_year, j.transition_year)
+ORDER BY transition_year;
