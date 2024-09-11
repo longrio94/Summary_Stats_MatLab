@@ -1,60 +1,32 @@
-WITH dec_obligor AS (
-    -- Select obligors from December
+WITH filtered_data AS (
+    -- Extract year and month for filtering December and January data
     SELECT 
-        EXTRACT(YEAR FROM peil_dt) AS year, 
+        EXTRACT(YEAR FROM peil_dt) AS year,
+        EXTRACT(MONTH FROM peil_dt) AS month,
         obligor_id
     FROM customer_table
-    WHERE EXTRACT(MONTH FROM peil_dt) = 12
+    WHERE EXTRACT(MONTH FROM peil_dt) IN (12, 1) -- Filter for Dec and Jan
 ),
-jan_obligor AS (
-    -- Select obligors from January
-    SELECT 
-        EXTRACT(YEAR FROM peil_dt) AS year, 
-        obligor_id
-    FROM customer_table
-    WHERE EXTRACT(MONTH FROM peil_dt) = 1
+dec_data AS (
+    -- Filter for December data
+    SELECT year, obligor_id
+    FROM filtered_data
+    WHERE month = 12
 ),
-same_obligor AS (
-    -- Find obligors that are present in both December and January
-    SELECT 
-        d.year + 1 AS year, -- Increment December's year to compare with January's
-        COUNT(DISTINCT d.obligor_id) AS same_obligor_count
-    FROM dec_obligor d
-    JOIN jan_obligor j 
-        ON d.obligor_id = j.obligor_id AND d.year + 1 = j.year
-    GROUP BY d.year
-),
-dec_only_obligor AS (
-    -- Find obligors that are only in December (not in January)
-    SELECT 
-        d.year + 1 AS year, -- Increment December's year to compare with January's
-        COUNT(DISTINCT d.obligor_id) AS dec_only_count
-    FROM dec_obligor d
-    LEFT JOIN jan_obligor j 
-        ON d.obligor_id = j.obligor_id AND d.year + 1 = j.year
-    WHERE j.obligor_id IS NULL
-    GROUP BY d.year
-),
-jan_only_obligor AS (
-    -- Find obligors that are only in January (not in December)
-    SELECT 
-        j.year AS year,
-        COUNT(DISTINCT j.obligor_id) AS jan_only_count
-    FROM jan_obligor j
-    LEFT JOIN dec_obligor d 
-        ON j.obligor_id = d.obligor_id AND d.year + 1 = j.year
-    WHERE d.obligor_id IS NULL
-    GROUP BY j.year
+jan_data AS (
+    -- Filter for January data
+    SELECT year, obligor_id
+    FROM filtered_data
+    WHERE month = 1
 )
--- Combine the results
+-- Compare December and January obligors
 SELECT 
-    COALESCE(same_obligor.year, dec_only_obligor.year, jan_only_obligor.year) AS year,
-    COALESCE(same_obligor.same_obligor_count, 0) AS same_obligor_count,
-    COALESCE(dec_only_obligor.dec_only_count, 0) AS dec_only_count,
-    COALESCE(jan_only_obligor.jan_only_count, 0) AS jan_only_count
-FROM same_obligor
-FULL OUTER JOIN dec_only_obligor 
-    ON same_obligor.year = dec_only_obligor.year
-FULL OUTER JOIN jan_only_obligor
-    ON COALESCE(same_obligor.year, dec_only_obligor.year) = jan_only_obligor.year
+    COALESCE(d.year, j.year) AS year,  -- Take the common year
+    COUNT(DISTINCT d.obligor_id) AS dec_only_count,  -- Obligors only in Dec
+    COUNT(DISTINCT j.obligor_id) AS jan_only_count,  -- Obligors only in Jan
+    COUNT(DISTINCT CASE WHEN d.obligor_id = j.obligor_id THEN d.obligor_id ELSE NULL END) AS same_obligor_count -- Obligors in both
+FROM dec_data d
+FULL OUTER JOIN jan_data j 
+    ON d.obligor_id = j.obligor_id AND d.year = j.year
+GROUP BY COALESCE(d.year, j.year)
 ORDER BY year;
