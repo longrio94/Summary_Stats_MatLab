@@ -1,19 +1,20 @@
+WITH matches AS (
+    select 
+        A.obligor_id as obligor_id_A, 
+        B.obligor_id as obligor_id_B,
+        CASE WHEN A.obligor_id = B.obligor_id THEN 1 ELSE 0 END as obligor_match
+    from 
+        (select distinct obligor_id
+         from MODEL_VALID.oot50_obligor_20240815_base_statistics
+         where l_peil_dt = '2022-12-31') as A
+    full outer join 
+        (select distinct obligor_id
+         from MODEL_VALID.oot50_obligor_20240815_base_statistics
+         where l_peil_dt = '2023-01-31') as B
+    on A.obligor_id = B.obligor_id
+)
 select 
     COUNT(CASE WHEN obligor_match = 1 THEN 1 END) as count_obligor_match_1,
     COUNT(CASE WHEN B.obligor_id IS NULL THEN 1 END) as count_obligor_id_B_null,
     COUNT(CASE WHEN A.obligor_id IS NULL THEN 1 END) as count_obligor_id_A_null
-from 
-(
-    select A.obligor_id as obligor_id_A, 
-           B.obligor_id as obligor_id_B,
-           case when A.obligor_id = B.obligor_id then 1 else 0 end as obligor_match
-    from 
-    (select distinct obligor_id
-     from MODEL_VALID.oot50_obligor_20240815_base_statistics
-     where l_peil_dt = '2022-12-31') as A
-    full outer join 
-    (select distinct obligor_id
-     from MODEL_VALID.oot50_obligor_20240815_base_statistics
-     where l_peil_dt = '2023-01-31') as B
-    on A.obligor_id = B.obligor_id
-) as matches;
+from matches;
