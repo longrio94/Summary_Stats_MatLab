@@ -1,32 +1,19 @@
-WITH filtered_data AS (
-    -- Extract the transition year and month for filtering December and January data
-    SELECT 
-        CAST(EXTRACT(YEAR FROM peil_dt) AS INTEGER) AS transition_year,
-        CAST(EXTRACT(MONTH FROM peil_dt) AS INTEGER) AS month,
-        obligor_id
-    FROM customer_table
-    WHERE EXTRACT(MONTH FROM peil_dt) IN (12, 1) -- Filter for Dec and Jan
-),
-dec_data AS (
-    -- Filter for December data
-    SELECT transition_year, obligor_id
-    FROM filtered_data
-    WHERE month = 12
-),
-jan_data AS (
-    -- Filter for January data
-    SELECT transition_year, obligor_id
-    FROM filtered_data
-    WHERE month = 1
-)
--- Compare December and January obligors
-SELECT 
-    COALESCE(d.transition_year, j.transition_year) AS transition_year,  -- Take the common transition year
-    COUNT(DISTINCT d.obligor_id) AS dec_only_count,  -- Obligors only in Dec
-    COUNT(DISTINCT j.obligor_id) AS jan_only_count,  -- Obligors only in Jan
-    COUNT(DISTINCT CASE WHEN d.obligor_id = j.obligor_id THEN d.obligor_id ELSE NULL END) AS same_obligor_count -- Obligors in both
-FROM dec_data d
-FULL OUTER JOIN jan_data j 
-    ON d.obligor_id = j.obligor_id AND d.transition_year = j.transition_year
-GROUP BY COALESCE(d.transition_year, j.transition_year)
-ORDER BY transition_year;
+select 
+    COUNT(CASE WHEN obligor_match = 1 THEN 1 END) as count_obligor_match_1,
+    COUNT(CASE WHEN B.obligor_id IS NULL THEN 1 END) as count_obligor_id_B_null,
+    COUNT(CASE WHEN A.obligor_id IS NULL THEN 1 END) as count_obligor_id_A_null
+from 
+(
+    select A.obligor_id as obligor_id_A, 
+           B.obligor_id as obligor_id_B,
+           case when A.obligor_id = B.obligor_id then 1 else 0 end as obligor_match
+    from 
+    (select distinct obligor_id
+     from MODEL_VALID.oot50_obligor_20240815_base_statistics
+     where l_peil_dt = '2022-12-31') as A
+    full outer join 
+    (select distinct obligor_id
+     from MODEL_VALID.oot50_obligor_20240815_base_statistics
+     where l_peil_dt = '2023-01-31') as B
+    on A.obligor_id = B.obligor_id
+) as matches;
