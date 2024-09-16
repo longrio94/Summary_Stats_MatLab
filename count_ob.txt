@@ -1,20 +1,14 @@
-WITH matches AS (
-    select 
-        A.obligor_id as obligor_id_A, 
-        B.obligor_id as obligor_id_B,
-        CASE WHEN A.obligor_id = B.obligor_id THEN 1 ELSE 0 END as obligor_match
-    from 
-        (select distinct obligor_id
-         from MODEL_VALID.oot50_obligor_20240815_base_statistics
-         where l_peil_dt = '2022-12-31') as A
-    full outer join 
-        (select distinct obligor_id
-         from MODEL_VALID.oot50_obligor_20240815_base_statistics
-         where l_peil_dt = '2023-01-31') as B
-    on A.obligor_id = B.obligor_id
-)
-select 
-    COUNT(CASE WHEN obligor_match = 1 THEN 1 END) as count_obligor_match_1,
-    COUNT(CASE WHEN B.obligor_id IS NULL THEN 1 END) as count_obligor_id_B_null,
-    COUNT(CASE WHEN A.obligor_id IS NULL THEN 1 END) as count_obligor_id_A_null
-from matches;
+SELECT
+    EXTRACT(YEAR FROM peil_dt) AS year,
+    EXTRACT(MONTH FROM peil_dt) AS month,
+    COUNT(*) AS total_records,
+    SUM(CASE WHEN default_ind = 'Y' THEN 1 ELSE 0 END) AS default_count,
+    (SUM(CASE WHEN default_ind = 'Y' THEN 1 ELSE 0 END) * 100.0) / COUNT(*) AS default_rate_percentage
+FROM
+    rds_obligor
+GROUP BY
+    EXTRACT(YEAR FROM peil_dt),
+    EXTRACT(MONTH FROM peil_dt)
+ORDER BY
+    year,
+    month;
