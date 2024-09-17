@@ -1,14 +1,17 @@
 SELECT
-    peil_dt,
-    facility_id,
-    COUNT(DISTINCT agreement_id) AS agreement_count
+    t1.peil_dt,
+    COUNT(*) AS matching_accounts,
+    AVG(t1.balance - t2.balance) AS average_balance_difference,
+    SUM(t1.balance - t2.balance) AS total_balance_difference,
+    MAX(t1.balance - t2.balance) AS max_balance_difference,
+    MIN(t1.balance - t2.balance) AS min_balance_difference
 FROM
-    your_table_name
+    table1 t1
+INNER JOIN
+    table2 t2
+    ON t1.account_id = t2.account_id
+    AND t1.peil_dt = t2.peil_dt
 GROUP BY
-    peil_dt,
-    facility_id
-HAVING
-    COUNT(DISTINCT agreement_id) > 1
+    t1.peil_dt
 ORDER BY
-    peil_dt,
-    facility_id;
+    t1.peil_dt;
