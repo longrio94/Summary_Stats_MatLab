@@ -1,15 +1,14 @@
 SELECT
-    t1.peil_dt,
-    COUNT(DISTINCT t1.account_id) AS total_accounts_table1,
-    COUNT(DISTINCT CASE WHEN t2.account_id IS NOT NULL THEN t1.account_id END) AS matching_accounts,
-    (COUNT(DISTINCT CASE WHEN t2.account_id IS NOT NULL THEN t1.account_id END) * 100.0) / COUNT(DISTINCT t1.account_id) AS percentage_match
+    peil_dt,
+    facility_id,
+    COUNT(DISTINCT agreement_id) AS agreement_count
 FROM
-    table1 t1
-LEFT JOIN
-    table2 t2
-    ON t1.account_id = t2.account_id
-    AND t1.peil_dt = t2.peil_dt
+    your_table_name
 GROUP BY
-    t1.peil_dt
+    peil_dt,
+    facility_id
+HAVING
+    COUNT(DISTINCT agreement_id) > 1
 ORDER BY
-    t1.peil_dt;
+    peil_dt,
+    facility_id;
