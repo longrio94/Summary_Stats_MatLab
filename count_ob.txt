@@ -1,14 +1,17 @@
 SELECT
-    EXTRACT(YEAR FROM peil_dt) AS year,
-    EXTRACT(MONTH FROM peil_dt) AS month,
-    COUNT(*) AS total_records,
-    SUM(CASE WHEN default_ind = 'Y' THEN 1 ELSE 0 END) AS default_count,
-    (SUM(CASE WHEN default_ind = 'Y' THEN 1 ELSE 0 END) * 100.0) / COUNT(*) AS default_rate_percentage
+    COALESCE(t1.peil_dt, t2.peil_dt) AS peil_dt,
+    COUNT(DISTINCT t1.account_id) AS total_accounts_table1,
+    COUNT(DISTINCT t2.account_id) AS total_accounts_table2,
+    COUNT(DISTINCT CASE WHEN t1.account_id = t2.account_id THEN t1.account_id END) AS matching_accounts,
+    (COUNT(DISTINCT CASE WHEN t1.account_id = t2.account_id THEN t1.account_id END) * 100.0) / NULLIF(COUNT(DISTINCT t1.account_id), 0) AS percentage_match_t1,
+    (COUNT(DISTINCT CASE WHEN t1.account_id = t2.account_id THEN t1.account_id END) * 100.0) / NULLIF(COUNT(DISTINCT t2.account_id), 0) AS percentage_match_t2
 FROM
-    rds_obligor
+    table1 t1
+FULL OUTER JOIN
+    table2 t2
+    ON t1.account_id = t2.account_id
+    AND t1.peil_dt = t2.peil_dt
 GROUP BY
-    EXTRACT(YEAR FROM peil_dt),
-    EXTRACT(MONTH FROM peil_dt)
+    COALESCE(t1.peil_dt, t2.peil_dt)
 ORDER BY
-    year,
-    month;
+    peil_dt;
