@@ -1,8 +1,1 @@
-Upon receiving the 10 Out-of-Time (OOT) data tables from the RDS team, we conducted a thorough vetting process to ensure that the OOT data aligns with our expectations. This evaluation included checking for consistency between the OOT RDS and the Original RDS, assessing completeness by evaluating expected levels of missingness, ensuring the uniqueness of key variables, and examining trends in each key variable used for modeling. The focus of this task was on the transition from the end of one year to the beginning of the next, as recommended by expert judgment. A summary table detailing the working files and outputs can be found in the Summary document, and significant findings that raise concerns are listed in the Dialogue List for sharing with other stakeholders.
-
-Regarding the Obligor table, we found no issues with consistency, completeness, or uniqueness overall. However, when examining the trends of missingness and value movements from the end of one year to the beginning of the next, we identified issues with a few key variables. Specifically, the lti_m_frac variable raised concerns due to an average value jump from 3% to 1,000,000,000%, which was caused by 14 obligors exhibiting extreme values in both 2022 and 2023. When these 14 obligors are excluded, the lti_m_frac variable returns to a consistent trend throughout the year. Additionally, some 'hyp' variables are entirely missing for the recent year, which could impact downstream modeling and analysis.
-
-Regarding the Facility table, we found no issues with consistency, completeness, or uniqueness overall. However, upon reviewing the trends of missingness and value movements from the end of one year to the beginning of the next, we encountered issues with a few key variables. Like the Obligor table, certain 'hyp' variables are completely missing for the recent year, which may affect downstream modeling and analysis. 
-
-Regarding
-
+00
