@@ -31,7 +31,6 @@ class IFRS9PDRegression:
         print("Starting feature engineering...")
         df_engineered = df.copy()
         
-        # Apply logit transformation and create lagged features for ODR
         df_engineered['Logit_ODR'] = self.logit_transform(df_engineered['ODR'])
         if 'ODR' in self.feature_config:
             for transform, degree in self.feature_config['ODR'].items():
@@ -43,10 +42,9 @@ class IFRS9PDRegression:
                 elif transform == "yoy_change":
                     df_engineered['Logit_ODR_yoy'] = df_engineered['Logit_ODR'].pct_change(periods=12)
         
-        # Feature engineering for other variables
         for feature, transformations in self.feature_config.items():
             if feature == 'ODR':
-                continue  # We've already handled ODR
+                continue
             if feature not in df_engineered.columns:
                 continue
             for transform, degree in transformations.items():
@@ -97,7 +95,7 @@ class IFRS9PDRegression:
         results = sorted(results, key=lambda x: x[1])
         best_features = list(results[0][0])
         print(f"Combination selection complete. Best features: {best_features}")
-        return X[best_features], results[:5]  # Return only top 5 combinations
+        return X[best_features], results[:5]
     
     def embedded_selection(self, X, y):
         print("Starting embedded selection (Lasso)...")
@@ -128,7 +126,7 @@ class IFRS9PDRegression:
             raise ValueError("X or y is empty after Lasso selection")
         
         model = LinearRegression()
-        rfe = RFE(model, n_features_to_select=None)  # Use all features
+        rfe = RFE(model, n_features_to_select=None)
         rfe.fit(X, y)
         selected_features = X.columns[rfe.support_]
         print(f"Number of features selected by RFE: {len(selected_features)}")
@@ -162,16 +160,9 @@ class IFRS9PDRegression:
         y_pred = model.predict(X)
         residuals = y - y_pred
         
-        # Normality of Residuals: Jarque-Bera test
         jb_stat, jb_pvalue, *_ = jarque_bera(residuals)
-        
-        # Stationarity: ADF test
         adf_stat, adf_pvalue, *_ = adfuller(residuals)
-        
-        # Heteroskedasticity: White's test
         white_stat, white_pvalue, *_ = het_white(residuals, X)
-        
-        # Monotonicity: Mann-Kendall test
         mk_stat, mk_pvalue, *_ = stats.mstats.kendalltau(range(len(residuals)), residuals)
         
         return {
@@ -245,7 +236,7 @@ class IFRS9PDRegression:
                                            index=oot_features.index)
         return self.model.predict(oot_features_scaled)
 
-# Data generation and model execution
+# Example usage
 if __name__ == "__main__":
     print("Generating sample data...")
     np.random.seed(42)
@@ -283,4 +274,12 @@ if __name__ == "__main__":
         predictions_combination = model_combination.predict(oot_data)
         print("Combination Method - OOT Predictions:", predictions_combination)
         print("Combination Method - Selected Features:", model_combination.selected_features)
-    except Exception</antArtifact>
+    except Exception as e:
+        print(f"Error in Combination method: {str(e)}")
+
+    print("\nUsing Embedded_Wrapper Method:")
+    model_embedded_wrapper = IFRS9PDRegression(feature_config, method="Embedded_Wrapper", 
+                                               lasso_alphas=[0.001, 0.01, 0.1, 1, 10])
+    try:
+        model_embedded_wrapper.fit(df)
+        predictions_embedded_wrapper = model_embedded_wrapper.predict(</antArtifact>
