@@ -28,6 +28,7 @@ class IFRS9PDRegression:
         return np.log(x / (1 - x))
     
     def feature_engineering(self, df):
+        print("Starting feature engineering...")
         df_engineered = df.copy()
         
         # Apply logit transformation and create lagged features for ODR
@@ -37,6 +38,10 @@ class IFRS9PDRegression:
                 if transform == "lag":
                     for i in range(1, degree + 1):
                         df_engineered[f'Logit_ODR_lag{i}'] = df_engineered['Logit_ODR'].shift(i)
+                elif transform == "mom_change":
+                    df_engineered['Logit_ODR_mom'] = df_engineered['Logit_ODR'].pct_change()
+                elif transform == "yoy_change":
+                    df_engineered['Logit_ODR_yoy'] = df_engineered['Logit_ODR'].pct_change(periods=12)
         
         # Feature engineering for other variables
         for feature, transformations in self.feature_config.items():
@@ -53,25 +58,32 @@ class IFRS9PDRegression:
                 elif transform == "poly":
                     for i in range(2, degree + 1):
                         df_engineered[f"{feature}_poly{i}"] = df_engineered[feature] ** i
-                elif transform == "mom_change":  # Month-on-Month change
+                elif transform == "mom_change":
                     df_engineered[f"{feature}_mom"] = df_engineered[feature].pct_change()
-                elif transform == "yoy_change":  # Year-on-Year change
+                elif transform == "yoy_change":
                     df_engineered[f"{feature}_yoy"] = df_engineered[feature].pct_change(periods=12)
-                elif transform == "delta_diff":  # Delta Difference
+                elif transform == "delta_diff":
                     df_engineered[f"{feature}_delta"] = df_engineered[feature].diff()
         
-        return df_engineered.dropna()
+        df_engineered = df_engineered.dropna()
+        print(f"Feature engineering complete. Shape: {df_engineered.shape}")
+        return df_engineered
     
     def feature_screening(self, df):
+        print("Starting feature screening...")
         corr_matrix = df.corr().abs()
         upper_triangle = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
         to_drop = [column for column in upper_triangle.columns if any(upper_triangle[column] > self.corr_threshold)]
-        return df.drop(columns=to_drop)
+        df_screened = df.drop(columns=to_drop)
+        print(f"Feature screening complete. Remaining features: {df_screened.columns.tolist()}")
+        return df_screened
     
     def scale_features(self, X):
+        print("Scaling features...")
         return pd.DataFrame(self.scaler.fit_transform(X), columns=X.columns, index=X.index)
     
     def combination_selection(self, X, y):
+        print("Starting combination selection...")
         results = []
         features = X.columns
         for k in range(self.min_combinations, len(features) + 1):
@@ -84,9 +96,16 @@ class IFRS9PDRegression:
         
         results = sorted(results, key=lambda x: x[1])
         best_features = list(results[0][0])
+        print(f"Combination selection complete. Best features: {best_features}")
         return X[best_features], results[:5]  # Return only top 5 combinations
     
     def embedded_selection(self, X, y):
+        print("Starting embedded selection (Lasso)...")
+        print(f"Shape of X before Lasso: {X.shape}")
+        print(f"Shape of y before Lasso: {y.shape}")
+        if X.empty or y.empty:
+            raise ValueError("X or y is empty after preprocessing")
+        
         lasso_cv = GridSearchCV(Lasso(), {'alpha': self.lasso_alphas}, cv=5, scoring='neg_mean_squared_error')
         lasso_cv.fit(X, y)
         best_alpha = lasso_cv.best_params_['alpha']
@@ -95,21 +114,34 @@ class IFRS9PDRegression:
         lasso = Lasso(alpha=best_alpha)
         lasso.fit(X, y)
         selected_features = X.columns[lasso.coef_ != 0]
+        print(f"Number of features selected by Lasso: {len(selected_features)}")
+        if len(selected_features) == 0:
+            print("Warning: Lasso selected no features. Using all features.")
+            return X
         return X[selected_features]
     
     def wrapper_selection(self, X, y):
+        print("Starting wrapper selection (RFE)...")
+        print(f"Shape of X before RFE: {X.shape}")
+        print(f"Shape of y before RFE: {y.shape}")
+        if X.empty or y.empty:
+            raise ValueError("X or y is empty after Lasso selection")
+        
         model = LinearRegression()
         rfe = RFE(model, n_features_to_select=None)  # Use all features
         rfe.fit(X, y)
         selected_features = X.columns[rfe.support_]
+        print(f"Number of features selected by RFE: {len(selected_features)}")
         return X[selected_features]
     
     def train_model(self, X, y):
+        print("Training final model...")
         self.model = LinearRegression()
         self.model.fit(X, y)
         return self.model
     
     def evaluate_model(self, X, y):
+        print("Evaluating model...")
         y_pred = self.model.predict(X)
         mse = mean_squared_error(y, y_pred)
         mae = mean_absolute_error(y, y_pred)
@@ -126,6 +158,7 @@ class IFRS9PDRegression:
         }
     
     def diagnostic_tests(self, X, y, model):
+        print("Performing diagnostic tests...")
         y_pred = model.predict(X)
         residuals = y - y_pred
         
@@ -153,11 +186,15 @@ class IFRS9PDRegression:
         }
     
     def fit(self, df):
+        print(f"Starting model fitting. Input shape: {df.shape}")
         df_engineered = self.feature_engineering(df)
         X = df_engineered.drop(columns=['ODR', 'Logit_ODR'])
         y = df_engineered['Logit_ODR']
+        print(f"Shape of X after feature engineering: {X.shape}")
+        print(f"Shape of y: {y.shape}")
         
         X = self.feature_screening(X)
+        print(f"Shape of X after feature screening: {X.shape}")
         X_scaled = self.scale_features(X)
         
         if self.method == "Combination":
@@ -200,6 +237,7 @@ class IFRS9PDRegression:
         return self
     
     def predict(self, oot_data):
+        print("Making predictions on out-of-time data...")
         oot_engineered = self.feature_engineering(oot_data)
         oot_features = oot_engineered[self.selected_features]
         oot_features_scaled = pd.DataFrame(self.scaler.transform(oot_features), 
@@ -207,9 +245,9 @@ class IFRS9PDRegression:
                                            index=oot_features.index)
         return self.model.predict(oot_features_scaled)
 
-# Example usage
+# Data generation and model execution
 if __name__ == "__main__":
-    # Create a sample dataset
+    print("Generating sample data...")
     np.random.seed(42)
     dates = pd.date_range(start='2010-01-01', end='2020-12-31', freq='M')
     df = pd.DataFrame({
@@ -221,7 +259,6 @@ if __name__ == "__main__":
     })
     df.set_index('Date', inplace=True)
 
-    # Create out-of-time data
     oot_dates = pd.date_range(start='2021-01-01', end='2021-12-31', freq='M')
     oot_data = pd.DataFrame({
         'Date': oot_dates,
@@ -239,21 +276,11 @@ if __name__ == "__main__":
         'UNR': {'lag': 1, 'mom_change': True, 'yoy_change': True, 'delta_diff': True}
     }
     
-    # Using Combination method
-    print("Using Combination Method:")
+    print("\nUsing Combination Method:")
     model_combination = IFRS9PDRegression(feature_config, method="Combination", min_combinations=2)
-    model_combination.fit(df)
-    predictions_combination = model_combination.predict(oot_data)
-    print("Combination Method - OOT Predictions:", predictions_combination)
-    print("Combination Method - Selected Features:", model_combination.selected_features)
-
-    print("\n" + "="*50 + "\n")
-
-    # Using Embedded_Wrapper method
-    print("Using Embedded_Wrapper Method:")
-    model_embedded_wrapper = IFRS9PDRegression(feature_config, method="Embedded_Wrapper", 
-                                               lasso_alphas=[0.001, 0.01, 0.1, 1, 10])
-    model_embedded_wrapper.fit(df)
-    predictions_embedded_wrapper = model_embedded_wrapper.predict(oot_data)
-    print("Embedded_Wrapper Method - OOT Predictions:", predictions_embedded_wrapper)
-    print("Embedded_Wrapper Method - Selected Features:", model_embedded_wrapper.selected_features)
+    try:
+        model_combination.fit(df)
+        predictions_combination = model_combination.predict(oot_data)
+        print("Combination Method - OOT Predictions:", predictions_combination)
+        print("Combination Method - Selected Features:", model_combination.selected_features)
+    except Exception</antArtifact>
