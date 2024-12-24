@@ -40,21 +40,45 @@ else:
 df['ODR_stationary'] = odr_stationary
 
 # ---- Step 2: Create Lagged Features ----
+# Select MEFs and number of lags
+mefs = ['CPI', 'HPI', 'GDP', 'Unemployment_rate']
 lags = 1
-df['CPI_lag1'] = df['CPI'].shift(1)
-df['HPI_lag1'] = df['HPI'].shift(1)
+lagged_mefs = {}
 
-# ---- Step 3: Drop NaN Rows to Synchronize Data ----
+for mef in mefs:
+    lagged_series = df[mef].shift(lags)
+    lagged_mefs[f'{mef}_lag{lags}'] = lagged_series
+
+# Add lagged MEFs to the dataframe
+for col, series in lagged_mefs.items():
+    df[col] = series
+
+# ---- Step 3: Check and Make Lagged MEFs Stationary ----
+stationary_lagged_mefs = {}
+lagged_mefs_diff_counts = {}
+
+for col in lagged_mefs.keys():
+    stationary_series, diff_count = make_stationary(df[col])
+    stationary_lagged_mefs[col] = stationary_series
+    lagged_mefs_diff_counts[col] = diff_count
+    print(f"'{col}' differenced {diff_count} time(s) to achieve stationarity.")
+
+# Add stationary lagged MEFs back to the dataframe
+for col, series in stationary_lagged_mefs.items():
+    df[f'{col}_stationary'] = series
+
+# ---- Step 4: Drop NaN Rows to Synchronize Data ----
 # Drop rows where any column has NaN
 df.dropna(inplace=True)
 
-# ---- Step 4: Extract Endogenous and Exogenous Variables ----
+# ---- Step 5: Extract Endogenous and Exogenous Variables ----
 endog = df['ODR_stationary']
-exog = df[['CPI_lag1', 'HPI_lag1']]
+exog_columns = [f'{col}_stationary' for col in lagged_mefs.keys()]
+exog = df[exog_columns]
 
 print(f"Length of endog: {len(endog)}, Length of exog: {len(exog)}")
 
-# ---- Step 5: Fit Auto ARIMA ----
+# ---- Step 6: Fit Auto ARIMA ----
 auto_model = auto_arima(
     endog,
     X=exog,
@@ -70,17 +94,17 @@ auto_model = auto_arima(
 best_order = auto_model.order
 print(f"Best ARIMA Order: {best_order}")
 
-# ---- Step 6: Fit SARIMAX Model ----
+# ---- Step 7: Fit SARIMAX Model ----
 model = SARIMAX(endog, exog=exog, order=best_order)
 sarimax_model = model.fit(disp=False)
 
 print(sarimax_model.summary())
 
-# ---- Step 7: Forecast ----
+# ---- Step 8: Forecast ----
 forecast = sarimax_model.forecast(steps=3, exog=exog.iloc[-3:])
 print("Forecasted ODR:", forecast.values)
 
-# ---- Step 8: Evaluate Model ----
+# ---- Step 9: Evaluate Model ----
 actual = endog[-3:]
 rmse = np.sqrt(mean_squared_error(actual, forecast))
 print(f"RMSE: {rmse:.4f}")
