@@ -1,78 +1,26 @@
 import pandas as pd
 import numpy as np
-from itertools import combinations
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from pmdarima import auto_arima
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import mean_squared_error, mean_absolute_error
-import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error
 
 # ---- Utility Functions ----
-
 def check_stationarity(series, significance_level=0.05):
-    """
-    Perform the Augmented Dickey-Fuller test to check stationarity of a time series.
-    Returns True if the series is stationary, False otherwise.
-    """
+    """Check if a series is stationary using the Augmented Dickey-Fuller test."""
     result = adfuller(series.dropna())
     return result[1] < significance_level  # True if stationary
 
-def make_stationary(series, max_diffs=5):
-    """
-    Automatically difference a series until it becomes stationary or the maximum number of differences is reached.
-    Returns the stationary series and the number of differences applied.
-    """
-    differenced_series = series.copy()
+def make_stationary(series, max_diffs=3):
+    """Difference a series until it becomes stationary or reaches the max limit."""
     diff_count = 0
-    while not check_stationarity(differenced_series) and diff_count < max_diffs:
-        differenced_series = differenced_series.diff().dropna()
+    while not check_stationarity(series) and diff_count < max_diffs:
+        series = series.diff().dropna()
         diff_count += 1
-    return differenced_series, diff_count
+    return series, diff_count
 
-def add_lagged_features(df, cols, lags):
-    """
-    Add lagged features for specified columns and lag counts.
-    """
-    for col in cols:
-        for lag in range(1, lags + 1):
-            df[f"{col}_lag{lag}"] = df[col].shift(lag)
-    return df
-
-def add_interaction_terms(df, selected_cols):
-    """
-    Add interaction terms for all combinations of the selected columns.
-    """
-    for col1, col2 in combinations(selected_cols, 2):
-        interaction_name = f"{col1}_x_{col2}"
-        df[interaction_name] = df[col1] * df[col2]
-    return df
-
-def sarima_to_formula(model, exog_columns):
-    """
-    Convert a fitted SARIMA model into a readable formula representation.
-    """
-    formula_parts = []
-    params = model.params
-
-    # Add AR, MA, and intercept terms
-    if "intercept" in params:
-        formula_parts.append(f"{params['intercept']:.4f}")  # Intercept
-    for param_name, param_value in params.items():
-        if param_name.startswith('ar.L') or param_name.startswith('ma.L'):
-            formula_parts.append(f"{param_value:.4f}*{param_name}")
-
-    # Add exogenous variables
-    for exog_col in exog_columns:
-        if exog_col in params.index:
-            formula_parts.append(f"{params[exog_col]:.4f}*{exog_col}")
-
-    formula = " + ".join(formula_parts)
-    return f"ODR ~ {formula}"
-
-# ---- Load and Prepare Data ----
-
-# Replace this with your actual data
+# ---- Load Data ----
+# Example data
 df = pd.DataFrame({
     'ODR': [0.02, 0.025, 0.023, 0.03, 0.027, 0.03, 0.032, 0.035],
     'CPI': [1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2],
@@ -81,81 +29,58 @@ df = pd.DataFrame({
     'Unemployment_rate': [5.1, 5.0, 5.2, 5.3, 5.1, 4.9, 4.8, 4.7]
 })
 
-# ---- User Selections ----
-mefs_to_lag = ['CPI', 'HPI']  # Variables to lag
-mefs_for_interaction = ['GDP', 'Unemployment_rate']  # Variables for interaction terms
-lags = 2  # Number of lags
-
-# ---- Data Preparation ----
-df = add_lagged_features(df, mefs_to_lag, lags)
-df = add_interaction_terms(df, mefs_for_interaction)
-
-# Check and make 'ODR' stationary
+# ---- Step 1: Stationarize Target Variable ----
 odr_stationary, odr_diff_count = make_stationary(df['ODR'])
 if odr_diff_count > 0:
     print(f"'ODR' differenced {odr_diff_count} time(s) to achieve stationarity.")
 else:
     print("'ODR' is already stationary.")
 
-# Check stationarity for all MEFs
-stationary_data = {}
-for col in df.columns:
-    if col != 'ODR':  # Exclude the target variable
-        stationary_data[col], diff_count = make_stationary(df[col])
-        if diff_count > 0:
-            print(f"{col} differenced {diff_count} time(s) to achieve stationarity.")
+# Add the stationary ODR back to the dataframe
+df['ODR_stationary'] = odr_stationary
 
-# Create stationary dataset
-stationary_df = pd.concat(stationary_data.values(), axis=1)
-stationary_df.columns = stationary_data.keys()
-stationary_df['ODR'] = odr_stationary.iloc[len(df) - len(stationary_df):].values  # Align ODR with stationary features
-stationary_df.dropna(inplace=True)
+# ---- Step 2: Create Lagged Features ----
+lags = 1
+df['CPI_lag1'] = df['CPI'].shift(1)
+df['HPI_lag1'] = df['HPI'].shift(1)
 
-# ---- Auto ARIMA to Select Best Order ----
-endog = stationary_df['ODR']
-exog = stationary_df.drop(columns=['ODR'])
+# ---- Step 3: Drop NaN Rows to Synchronize Data ----
+# Drop rows where any column has NaN
+df.dropna(inplace=True)
 
-auto_model = auto_arima(endog, X=exog, seasonal=False, stepwise=True, trace=True)
+# ---- Step 4: Extract Endogenous and Exogenous Variables ----
+endog = df['ODR_stationary']
+exog = df[['CPI_lag1', 'HPI_lag1']]
+
+print(f"Length of endog: {len(endog)}, Length of exog: {len(exog)}")
+
+# ---- Step 5: Fit Auto ARIMA ----
+auto_model = auto_arima(
+    endog,
+    X=exog,
+    seasonal=False,
+    stepwise=True,
+    trace=True,
+    max_p=1,  # Simplified AR lags
+    max_q=1,  # Simplified MA lags
+    max_d=1,  # Simplified differencing
+    suppress_warnings=True
+)
+
 best_order = auto_model.order
-print(f"Selected Order: {best_order}")
+print(f"Best ARIMA Order: {best_order}")
 
-# ---- Time-Series Cross-Validation ----
-tscv = TimeSeriesSplit(n_splits=3)
-rmse_scores, mae_scores = [], []
+# ---- Step 6: Fit SARIMAX Model ----
+model = SARIMAX(endog, exog=exog, order=best_order)
+sarimax_model = model.fit(disp=False)
 
-for train_index, test_index in tscv.split(stationary_df):
-    train_endog, test_endog = endog.iloc[train_index], endog.iloc[test_index]
-    train_exog, test_exog = exog.iloc[train_index], exog.iloc[test_index]
+print(sarimax_model.summary())
 
-    model = SARIMAX(train_endog, exog=train_exog, order=best_order)
-    sarimax_model = model.fit(disp=False)
+# ---- Step 7: Forecast ----
+forecast = sarimax_model.forecast(steps=3, exog=exog.iloc[-3:])
+print("Forecasted ODR:", forecast.values)
 
-    forecast = sarimax_model.predict(start=len(train_endog), end=len(train_endog) + len(test_endog) - 1, exog=test_exog)
-
-    rmse_scores.append(np.sqrt(mean_squared_error(test_endog, forecast)))
-    mae_scores.append(mean_absolute_error(test_endog, forecast))
-
-print(f"Cross-Validation RMSE: {np.mean(rmse_scores):.4f} ± {np.std(rmse_scores):.4f}")
-print(f"Cross-Validation MAE: {np.mean(mae_scores):.4f} ± {np.std(mae_scores):.4f}")
-
-# ---- Final Model and Forecast ----
-final_model = SARIMAX(endog, exog=exog, order=best_order)
-sarimax_model = final_model.fit(disp=False)
-
-forecast = sarimax_model.predict(start=len(endog), end=len(endog) + 2, exog=exog.iloc[-3:])
-print("Final Forecast:", forecast.values)
-
-# ---- Model Formula ----
-sarima_formula = sarima_to_formula(sarimax_model, exog.columns)
-print("SARIMA Model Formula:", sarima_formula)
-
-# ---- Visualization ----
-plt.figure(figsize=(10, 6))
-plt.plot(endog, label="Actual ODR", marker='o')
-plt.plot(forecast, label="Forecasted ODR", marker='x', linestyle='--')
-plt.title("ODR Forecast with Selected Features")
-plt.xlabel("Time")
-plt.ylabel("ODR")
-plt.legend()
-plt.grid()
-plt.show()
+# ---- Step 8: Evaluate Model ----
+actual = endog[-3:]
+rmse = np.sqrt(mean_squared_error(actual, forecast))
+print(f"RMSE: {rmse:.4f}")
