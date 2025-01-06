@@ -1,0 +1,40 @@
+# List of dynamic dates
+mydates = ['2025-01-01', '2025-02-01', '2025-03-01']
+
+# Placeholder for the final result
+final_df = None
+
+# Loop through each date in the list
+for date in mydates:
+    # Build the SQL query dynamically for each date
+    query = f"""
+    WITH CTE1 AS (
+        SELECT '{date}' AS BaseDate,
+               LAST_DAY('{date}') AS EndOfMonth
+    ),
+    CTE2 AS (
+        SELECT BaseDate,
+               EndOfMonth,
+               ADD_MONTHS(EndOfMonth, 1) AS NextMonthDate
+        FROM CTE1
+    ),
+    CTE3 AS (
+        SELECT BaseDate, NextMonthDate, COUNT(*) AS RowCount
+        FROM Aaa
+        WHERE Date BETWEEN BaseDate AND NextMonthDate
+        GROUP BY BaseDate, NextMonthDate
+    )
+    SELECT *
+    FROM CTE3
+    """
+    # Execute the query
+    current_df = spark.sql(query)
+    
+    # Union the results together
+    if final_df is None:
+        final_df = current_df
+    else:
+        final_df = final_df.union(current_df)
+
+# Display the final result
+final_df.show()
